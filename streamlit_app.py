@@ -248,6 +248,24 @@ with left:
     else:
         st.caption("No price history available.")
 
+    # ── valuation history (P/E line) — stacked under relative performance ──
+    pe = d.get("pe_series")
+    if pe:
+        st.markdown(f'<div class="erh" style="margin-top:14px;">Valuation History — {esc(pe["basis"])} '
+                    '<span class="sub">(last ~3 years)</span></div>', unsafe_allow_html=True)
+        xi, tv, tt = _idx_ticks(pe["dates"])
+        cd = [_tick(s) for s in pe["dates"]]
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=xi, y=pe["pe"], name="P/E",
+                                 line=dict(color=C["blue"], width=1.8),
+                                 fill="tozeroy", fillcolor="rgba(88,166,255,0.06)",
+                                 customdata=cd, hovertemplate="%{customdata}<br>%{y:.1f}×<extra></extra>"))
+        fig.update_yaxes(ticksuffix="×")
+        fig.update_xaxes(tickmode="array", tickvals=tv, ticktext=tt)
+        fig = _base_layout(fig, 260)
+        fig.update_layout(showlegend=False, hovermode="closest")
+        st.plotly_chart(fig, use_container_width=True, config=_CHART_CFG)
+
 with right:
     st.markdown('<div class="erh">Risk &amp; Range</div>', unsafe_allow_html=True)
     risk_rows = [
@@ -282,24 +300,6 @@ with right:
         fig.update_xaxes(ticksuffix="%", gridcolor=C["border"])
         fig.update_yaxes(gridcolor="rgba(0,0,0,0)")
         st.plotly_chart(_base_layout(fig, 220), use_container_width=True, config=_CHART_CFG)
-
-# ── valuation history (P/E line, full width) ─────────────────────────────────
-pe = d.get("pe_series")
-if pe:
-    st.markdown(f'<div class="erh">Valuation History — {esc(pe["basis"])} '
-                '<span class="sub">(last ~3 years)</span></div>', unsafe_allow_html=True)
-    xi, tv, tt = _idx_ticks(pe["dates"])
-    cd = [_tick(s) for s in pe["dates"]]
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=xi, y=pe["pe"], name="P/E",
-                             line=dict(color=C["blue"], width=1.8),
-                             fill="tozeroy", fillcolor="rgba(88,166,255,0.06)",
-                             customdata=cd, hovertemplate="%{customdata}<br>%{y:.1f}×<extra></extra>"))
-    fig.update_yaxes(ticksuffix="×")
-    fig.update_xaxes(tickmode="array", tickvals=tv, ticktext=tt)
-    fig = _base_layout(fig, 300)
-    fig.update_layout(showlegend=False, hovermode="closest")
-    st.plotly_chart(fig, use_container_width=True, config=_CHART_CFG)
 
 # ── quarterly revenue/profit | cash flow ─────────────────────────────────────
 ic = [c for c in (d.get("income_q") or []) if c.get("revenue") is not None or c.get("net_income") is not None]
