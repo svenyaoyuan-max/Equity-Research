@@ -228,7 +228,7 @@ def build_payload(ticker):
                     idx = sorted(set(np.linspace(0, T - 1, n).astype(int).tolist()))
                     out["chart"] = {
                         "ticker": report.ticker,
-                        "dates": [closes.index[i].strftime("%b %Y") for i in idx],
+                        "dates": [closes.index[i].strftime("%Y-%m-%d") for i in idx],
                         "stock": [round(float(s_norm.iloc[i]), 2) for i in idx],
                         "spy": [round(float(p_norm.iloc[i]), 2) for i in idx],
                         "stock_ret": round(float(s_norm.iloc[-1] - 100), 1),
