@@ -10,7 +10,7 @@ Data: Yahoo Finance (via yfinance). For research/education only — not investme
 """
 
 import html as _html
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import streamlit as st
 import plotly.graph_objects as go
@@ -300,6 +300,38 @@ with right:
         fig.update_xaxes(ticksuffix="%", gridcolor=C["border"])
         fig.update_yaxes(gridcolor="rgba(0,0,0,0)")
         st.plotly_chart(_base_layout(fig, 220), use_container_width=True, config=_CHART_CFG)
+
+    # ── 52-week P/E range (trailing = real, forward = approximated) ───────
+    pe_s = d.get("pe_series")
+    if pe_s and pe_s.get("pe"):
+        last_dt = _parse_date(pe_s["dates"][-1])
+        cutoff = last_dt - timedelta(days=365) if last_dt else None
+        v52 = [val for s, val in zip(pe_s["dates"], pe_s["pe"])
+               if val is not None and (cutoff is None or (_parse_date(s) and _parse_date(s) >= cutoff))]
+        if not v52:
+            v52 = [x for x in pe_s["pe"][-80:] if x is not None]
+        if v52:
+            t_cur, t_hi, t_lo = pe_s["pe"][-1], max(v52), min(v52)
+            eps_fwd, hi, lo = v.get("eps_fwd"), r.get("wk52_high"), r.get("wk52_low")
+            f_cur = v.get("fwd_pe")
+            f_hi = (hi / eps_fwd) if (hi and eps_fwd) else None
+            f_lo = (lo / eps_fwd) if (lo and eps_fwd) else None
+            cell = lambda x: f"{x:.1f}×" if x is not None else "—"
+            st.markdown('<div class="erh" style="margin-top:14px;">P/E Range '
+                        '<span class="sub">(52-week)</span></div>', unsafe_allow_html=True)
+            rows_html = (
+                "<tr><th class='l'>P/E</th><th>52W Low</th><th>Current</th><th>52W High</th></tr>"
+                f"<tr><td class='l' style='color:{C['text']};'>Trailing</td>"
+                f"<td style='color:{C['sub']};'>{cell(t_lo)}</td>"
+                f"<td style='color:{C['blue']};font-weight:700;'>{cell(t_cur)}</td>"
+                f"<td style='color:{C['sub']};'>{cell(t_hi)}</td></tr>"
+                f"<tr><td class='l' style='color:{C['text']};'>Forward*</td>"
+                f"<td style='color:{C['sub']};'>{cell(f_lo)}</td>"
+                f"<td style='color:{C['blue']};font-weight:700;'>{cell(f_cur)}</td>"
+                f"<td style='color:{C['sub']};'>{cell(f_hi)}</td></tr>"
+            )
+            st.markdown(f"<div class='ptwrap'><table class='pt'>{rows_html}</table></div>", unsafe_allow_html=True)
+            st.caption("*Forward band ≈ 52-week price range ÷ current forward EPS.")
 
 # ── quarterly revenue/profit | cash flow ─────────────────────────────────────
 ic = [c for c in (d.get("income_q") or []) if c.get("revenue") is not None or c.get("net_income") is not None]
