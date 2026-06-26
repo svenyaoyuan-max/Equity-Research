@@ -10,6 +10,7 @@ Data: Yahoo Finance (via yfinance). For research/education only — not investme
 """
 
 import html as _html
+from datetime import datetime
 
 import streamlit as st
 import plotly.graph_objects as go
@@ -29,7 +30,7 @@ st.set_page_config(page_title="Equity Research", page_icon="📈", layout="wide"
 st.markdown("""
 <style>
 .stApp { background:#0D1117; }
-.block-container { padding-top:1.1rem; padding-bottom:2rem; max-width:1340px; }
+.block-container { padding-top:3rem; padding-bottom:2rem; max-width:1340px; }
 section.main h1 { font-size:24px; }
 [data-testid="stMetricValue"] { font-size:18px; }
 .erh { font-size:13px; font-weight:600; text-transform:uppercase; letter-spacing:.05em;
@@ -80,6 +81,30 @@ def _g(x):
     return (f"+{x:.1f}%" if x >= 0 else f"{x:.1f}%") if x is not None else "—"
 
 
+def _parse_date(s):
+    for fmt in ("%Y-%m-%d", "%b %Y", "%Y-%m"):
+        try:
+            return datetime.strptime(str(s), fmt)
+        except Exception:
+            pass
+    return None
+
+def _tick(s):
+    dt = _parse_date(s)
+    return dt.strftime("%b '%y") if dt else str(s)
+
+def _idx_ticks(dates):
+    """Plot time series on an integer index (so duplicate/odd date labels can't
+    collapse points) and return tick positions labelled with months."""
+    n = len(dates)
+    xi = list(range(n))
+    if n <= 1:
+        return xi, xi, [_tick(s) for s in dates]
+    tv = sorted(set(int(round(i * (n - 1) / 6)) for i in range(7)))
+    tt = [_tick(dates[i]) for i in tv]
+    return xi, tv, tt
+
+
 def _base_layout(fig, height=320, date_axis=False):
     fig.update_layout(
         height=height,
@@ -93,8 +118,6 @@ def _base_layout(fig, height=320, date_axis=False):
         yaxis=dict(gridcolor=C["border"], zeroline=False),
         hovermode="x unified",
     )
-    if date_axis:
-        fig.update_xaxes(type="date", tickformat="%b %Y")
     return fig
 
 _CHART_CFG = {"displayModeBar": False}
@@ -175,16 +198,23 @@ pd_ = d.get("price_daily")
 if pd_:
     st.markdown('<div class="erh">Daily Price &amp; 20-day Moving Average '
                 '<span class="sub">— last ~12 months</span></div>', unsafe_allow_html=True)
+    xi, tv, tt = _idx_ticks(pd_["dates"])
+    cd = [_tick(s) for s in pd_["dates"]]
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=pd_["dates"], y=pd_["close"], name="Close",
+    fig.add_trace(go.Scatter(x=xi, y=pd_["close"], name="Close",
                              line=dict(color=C["blue"], width=2),
-                             fill="tozeroy", fillcolor="rgba(88,166,255,0.07)"))
-    fig.add_trace(go.Scatter(x=pd_["dates"], y=pd_["ma20"], name="20-day MA",
-                             line=dict(color=C["sub"], width=1.3, dash="dash")))
+                             fill="tozeroy", fillcolor="rgba(88,166,255,0.07)",
+                             customdata=cd, hovertemplate="%{customdata}<br>$%{y:.2f}<extra>Close</extra>"))
+    fig.add_trace(go.Scatter(x=xi, y=pd_["ma20"], name="20-day MA",
+                             line=dict(color=C["sub"], width=1.3, dash="dash"),
+                             customdata=cd, hovertemplate="%{customdata}<br>$%{y:.2f}<extra>MA20</extra>"))
     lo = min(pd_["close"]) * 0.97
     hi = max(pd_["close"]) * 1.03
     fig.update_yaxes(range=[lo, hi], tickprefix="$")
-    st.plotly_chart(_base_layout(fig, 360, date_axis=True), use_container_width=True, config=_CHART_CFG)
+    fig.update_xaxes(tickmode="array", tickvals=tv, ticktext=tt)
+    fig = _base_layout(fig, 360)
+    fig.update_layout(hovermode="closest")
+    st.plotly_chart(fig, use_container_width=True, config=_CHART_CFG)
     st.caption("Where price holds the 20-day line often marks short-term support.")
 
 # ── relative performance | risk & capital return ─────────────────────────────
@@ -194,11 +224,15 @@ with left:
     st.markdown(f'<div class="erh">{esc(d["ticker"])} vs S&amp;P 500 — 1-Year Relative Performance</div>',
                 unsafe_allow_html=True)
     if ch:
+        xi, tv, tt = _idx_ticks(ch["dates"])
+        cd = [_tick(s) for s in ch["dates"]]
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=ch["dates"], y=ch["spy"], name="S&P 500",
-                                 line=dict(color=C["sub"], width=1.4, dash="dash")))
-        fig.add_trace(go.Scatter(x=ch["dates"], y=ch["stock"], name=d["ticker"],
-                                 line=dict(color=C["blue"], width=2.2)))
+        fig.add_trace(go.Scatter(x=xi, y=ch["spy"], name="S&P 500",
+                                 line=dict(color=C["sub"], width=1.4, dash="dash"),
+                                 customdata=cd, hovertemplate="%{customdata}<br>%{y:.1f}<extra>S&P 500</extra>"))
+        fig.add_trace(go.Scatter(x=xi, y=ch["stock"], name=d["ticker"],
+                                 line=dict(color=C["blue"], width=2.2),
+                                 customdata=cd, hovertemplate="%{customdata}<br>%{y:.1f}<extra>" + d["ticker"] + "</extra>"))
         ac = C["green"] if ch["alpha"] >= 0 else C["red"]
         fig.add_annotation(xref="paper", yref="paper", x=0.01, y=0.99, showarrow=False,
                            align="left", xanchor="left", yanchor="top",
@@ -207,8 +241,10 @@ with left:
                            text=(f"{d['ticker']}: {ch['stock_ret']:+.1f}%<br>"
                                  f"S&P 500: {ch['spy_ret']:+.1f}%<br>"
                                  f"Alpha: {ch['alpha']:+.1f}%"))
-        fig.update_layout(showlegend=False)
-        st.plotly_chart(_base_layout(fig, 340, date_axis=True), use_container_width=True, config=_CHART_CFG)
+        fig.update_xaxes(tickmode="array", tickvals=tv, ticktext=tt)
+        fig = _base_layout(fig, 340)
+        fig.update_layout(showlegend=False, hovermode="closest")
+        st.plotly_chart(fig, use_container_width=True, config=_CHART_CFG)
     else:
         st.caption("No price history available.")
 
@@ -252,13 +288,18 @@ pe = d.get("pe_series")
 if pe:
     st.markdown(f'<div class="erh">Valuation History — {esc(pe["basis"])} '
                 '<span class="sub">(last ~3 years)</span></div>', unsafe_allow_html=True)
+    xi, tv, tt = _idx_ticks(pe["dates"])
+    cd = [_tick(s) for s in pe["dates"]]
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=pe["dates"], y=pe["pe"], name="P/E",
+    fig.add_trace(go.Scatter(x=xi, y=pe["pe"], name="P/E",
                              line=dict(color=C["blue"], width=1.8),
-                             fill="tozeroy", fillcolor="rgba(88,166,255,0.06)"))
+                             fill="tozeroy", fillcolor="rgba(88,166,255,0.06)",
+                             customdata=cd, hovertemplate="%{customdata}<br>%{y:.1f}×<extra></extra>"))
     fig.update_yaxes(ticksuffix="×")
-    fig.update_layout(showlegend=False)
-    st.plotly_chart(_base_layout(fig, 300, date_axis=True), use_container_width=True, config=_CHART_CFG)
+    fig.update_xaxes(tickmode="array", tickvals=tv, ticktext=tt)
+    fig = _base_layout(fig, 300)
+    fig.update_layout(showlegend=False, hovermode="closest")
+    st.plotly_chart(fig, use_container_width=True, config=_CHART_CFG)
 
 # ── quarterly revenue/profit | cash flow ─────────────────────────────────────
 ic = [c for c in (d.get("income_q") or []) if c.get("revenue") is not None or c.get("net_income") is not None]
@@ -272,7 +313,7 @@ with qa:
         labels = [c["label"] for c in ic]
         fig.add_trace(go.Bar(x=labels, y=[c.get("revenue") for c in ic], name="Revenue", marker_color=C["blue"]))
         fig.add_trace(go.Bar(x=labels, y=[c.get("net_income") for c in ic], name="Net Profit", marker_color=C["green"]))
-        fig.update_layout(barmode="group", hovermode="x")
+        fig.update_layout(barmode="group", hovermode="x", bargap=0.5, bargroupgap=0.15)
         st.plotly_chart(_base_layout(fig, 300), use_container_width=True, config=_CHART_CFG)
     else:
         st.caption("No quarterly income data available.")
@@ -284,7 +325,7 @@ with qb:
         labels = [c["label"] for c in cf]
         fig.add_trace(go.Bar(x=labels, y=[c.get("ocf") for c in cf], name="Operating CF", marker_color=C["green"]))
         fig.add_trace(go.Bar(x=labels, y=[c.get("fcf") for c in cf], name="Free CF", marker_color=C["blue"]))
-        fig.update_layout(barmode="group", hovermode="x")
+        fig.update_layout(barmode="group", hovermode="x", bargap=0.5, bargroupgap=0.15)
         st.plotly_chart(_base_layout(fig, 300), use_container_width=True, config=_CHART_CFG)
     else:
         st.caption("No cash flow data available.")
