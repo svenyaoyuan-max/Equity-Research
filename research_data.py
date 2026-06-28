@@ -13,6 +13,7 @@ render any images. All numbers come from Yahoo Finance via yfinance.
 """
 
 import math
+import time
 from datetime import datetime, timedelta
 
 import numpy as np
@@ -141,10 +142,26 @@ def build_payload(ticker):
 
     Raises ValueError if the ticker can't be loaded.
     """
-    report = EquityResearchReport(ticker)
-    if not report.stock or not report.info:
+    # Yahoo Finance throttles datacenter IPs (free hosts), so the fetch can
+    # come back empty. Retry a few times with backoff before giving up.
+    report = None
+    for attempt in range(3):
+        try:
+            cand = EquityResearchReport(ticker)
+        except Exception:
+            cand = None
+        if cand is not None and cand.stock and cand.info and len(cand.info) > 3:
+            report = cand
+            break
+        if attempt < 2:
+            time.sleep(1.5 * (attempt + 1))
+
+    if report is None:
         raise ValueError(
-            f"Could not load data for '{ticker}'. Check the symbol and try again."
+            "Yahoo Finance didn't return data — this is usually a temporary rate "
+            "limit on free cloud hosting, not a bad symbol. Please wait ~30 seconds "
+            "and try again. (If a valid ticker keeps failing, the data provider is "
+            "throttling this server.)"
         )
 
     info = report.info or {}

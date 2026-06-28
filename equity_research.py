@@ -782,7 +782,7 @@ class EquityResearchReport:
 
     def get_peer_data_with_forward_pe(self) -> List[dict]:
         peers_data   = []
-        peer_tickers = self.get_industry_peers()
+        peer_tickers = self.get_industry_peers()[:6]  # cap requests to reduce rate-limit risk
         for ticker in peer_tickers:
             try:
                 peer_info = yf.Ticker(ticker).info
