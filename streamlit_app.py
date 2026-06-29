@@ -290,13 +290,15 @@ with right:
     if cap:
         st.markdown('<div class="erh" style="margin-top:14px;">Capital Return '
                     '<span class="sub">(% of net income)</span></div>', unsafe_allow_html=True)
-        yrs = [str(c["year"]) for c in cap]
+        yrs = [f"FY{c['year']}" for c in cap]
         fig = go.Figure()
         fig.add_trace(go.Bar(y=yrs, x=[c.get("buyback_pct") or 0 for c in cap], name="Buybacks",
-                             orientation="h", marker_color=C["blue"]))
+                             orientation="h", marker_color=C["blue"],
+                             hovertemplate="%{y} · Buybacks %{x:.1f}% of net income<extra></extra>"))
         fig.add_trace(go.Bar(y=yrs, x=[c.get("dividend_pct") or 0 for c in cap], name="Dividends",
-                             orientation="h", marker_color=C["green"]))
-        fig.update_layout(barmode="stack", hovermode="y unified")
+                             orientation="h", marker_color=C["green"],
+                             hovertemplate="%{y} · Dividends %{x:.1f}% of net income<extra></extra>"))
+        fig.update_layout(barmode="stack", hovermode="closest")
         fig.update_xaxes(ticksuffix="%", gridcolor=C["border"])
         fig.update_yaxes(gridcolor="rgba(0,0,0,0)")
         st.plotly_chart(_base_layout(fig, 220), use_container_width=True, config=_CHART_CFG)
