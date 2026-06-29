@@ -290,18 +290,28 @@ with right:
     if cap:
         st.markdown('<div class="erh" style="margin-top:14px;">Capital Return '
                     '<span class="sub">(% of net income)</span></div>', unsafe_allow_html=True)
-        yrs = [f"FY{c['year']}" for c in cap]
-        fig = go.Figure()
-        fig.add_trace(go.Bar(y=yrs, x=[c.get("buyback_pct") or 0 for c in cap], name="Buybacks",
-                             orientation="h", marker_color=C["blue"],
-                             hovertemplate="%{y} · Buybacks %{x:.1f}% of net income<extra></extra>"))
-        fig.add_trace(go.Bar(y=yrs, x=[c.get("dividend_pct") or 0 for c in cap], name="Dividends",
-                             orientation="h", marker_color=C["green"],
-                             hovertemplate="%{y} · Dividends %{x:.1f}% of net income<extra></extra>"))
-        fig.update_layout(barmode="stack", hovermode="closest")
-        fig.update_xaxes(ticksuffix="%", gridcolor=C["border"])
-        fig.update_yaxes(gridcolor="rgba(0,0,0,0)")
-        st.plotly_chart(_base_layout(fig, 220), use_container_width=True, config=_CHART_CFG)
+        # Pure-HTML stacked bars (year printed on each row; no hover needed).
+        total = lambda c: (c.get("buyback_pct") or 0) + (c.get("dividend_pct") or 0)
+        scale = max(100.0, max(total(c) for c in cap))
+        html = (f'<div style="font-size:10px;margin:0 0 6px;color:{C["sub"]};">'
+                f'<span style="color:{C["blue"]};">&#9632;</span> Buybacks &nbsp; '
+                f'<span style="color:{C["green"]};">&#9632;</span> Dividends &nbsp; '
+                f'— total payout vs net income</div>')
+        for c in reversed(cap):  # most recent fiscal year on top
+            bb = c.get("buyback_pct") or 0
+            dv = c.get("dividend_pct") or 0
+            bbw, dvw = bb / scale * 100, dv / scale * 100
+            html += (
+                f'<div style="display:flex;align-items:center;gap:8px;margin:5px 0;font-size:11px;">'
+                f'<span style="width:54px;flex:none;color:{C["sub"]};">FY{c["year"]}</span>'
+                f'<div style="flex:1;background:#21262D;border-radius:3px;height:15px;overflow:hidden;display:flex;">'
+                f'<div title="Buybacks {bb:.0f}%" style="height:100%;width:{bbw:.1f}%;background:{C["blue"]};opacity:.9;"></div>'
+                f'<div title="Dividends {dv:.0f}%" style="height:100%;width:{dvw:.1f}%;background:{C["green"]};opacity:.9;"></div>'
+                f'</div>'
+                f'<span style="width:48px;text-align:right;flex:none;font-weight:700;color:{C["text"]};">{bb + dv:.0f}%</span>'
+                f'</div>'
+            )
+        st.markdown(html, unsafe_allow_html=True)
 
     # ── 52-week P/E range (trailing = real, forward = approximated) ───────
     pe_s = d.get("pe_series")
